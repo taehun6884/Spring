@@ -1,0 +1,17 @@
+@charset "UTF-8";
+
+
+#member_area {
+	text-align: right;
+	margin-bottom:20px;
+}
+
+article h1, h3 {
+	text-align: center;
+}
+
+.td_left{
+	text-align:center;
+	padding-left:10px;
+}
+
