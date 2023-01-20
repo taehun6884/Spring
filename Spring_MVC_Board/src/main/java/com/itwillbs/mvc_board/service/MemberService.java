@@ -1,5 +1,7 @@
 package com.itwillbs.mvc_board.service;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +24,37 @@ public class MemberService {
 		//    메서드 호출 코드 자체를 return 문 뒤에 바로 기술(리턴값이 없을 경우 호출만 수행)
 		// => 단, 메서드 호출 후에도 추가 작업이 필요한 경우 호출문과 리턴문을 분리
 		return mapper.insertMember(member);
+	}
+
+	// BCryptPasswordEncoder 활용한 로그인 작업 - getPasswd()
+	// => 파라미터 : 아이디   리턴타입 : String
+	// => 회원 정보 수정에 필요한 패스워드 조회 시 재사용
+	public String getPasswd(String id) {
+		return mapper.selectPasswd(id);
+	}
+
+	// 회원 상세 정보 조회 작업 - getMemberInfo()
+	// => 파라미터 : 아이디  리턴타입 : MemberVO
+	public MemberVO getMemberInfo(String id) {
+		return mapper.selectMemberInfo(id);
+	}
+
+	// 회원 목록 조회 작업 - getMemberList()
+	// => 파라미터 : 없음  리턴타입 : List<MemberVO>
+	public List<MemberVO> getMemberList() {
+		return mapper.selectMemberList();
+	}
+
+	// 회원 정보 수정 작업 - modifyMemberInfo()
+	// => 파라미터 : MemberVO 객체, 새 패스워드    리턴타입 : int(updateCount)
+	public int modifyMemberInfo(MemberVO member, String newPasswd) {
+		return mapper.updateMemberInfo(member, newPasswd);
+	}
+
+	// 회원 삭제 작업 - removeMember()
+	// => 파라미터 : MemberVO(member)   리턴타입 : int(deleteCount)
+	public int removeMember(MemberVO member) {
+		return mapper.deleteMember(member);
 	}
 
 }

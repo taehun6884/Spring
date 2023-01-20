@@ -12,7 +12,7 @@
 <body>
 	<header>
 		<!-- Login, Join 링크 표시 영역(inc/top.jsp 페이지 삽입) -->
-		<jsp:include page="/inc/top.jsp"></jsp:include>
+		<jsp:include page="../inc/top.jsp"></jsp:include>
 	</header>
 	<article>
 		<h1>회원 목록</h1>
@@ -32,7 +32,7 @@
 					<td>${member.email }</td>
 					<td>${member.date }</td>
 					<td>
-						<input type="button" value="수정" onclick="location.href='MemberUpdate.me?id=${member.id}'">
+						<input type="button" value="상세정보조회" onclick="location.href='MemberInfo.me?id=${member.id}'">
 						<input type="button" value="삭제" onclick="location.href='MemberDelete.me?id=${member.id}'">
 					</td>
 				</tr>

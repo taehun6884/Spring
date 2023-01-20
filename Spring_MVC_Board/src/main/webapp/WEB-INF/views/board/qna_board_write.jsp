@@ -43,7 +43,7 @@
 <body>
 	<header>
 		<!-- Login, Join 링크 표시 영역 -->
-		<jsp:include page="/inc/top.jsp"></jsp:include>
+		<jsp:include page="../inc/top.jsp"></jsp:include>
 	</header>
 	<!-- 게시판 등록 -->
 	<section id="writeForm">
@@ -75,9 +75,14 @@
 					<td class="td_left"><label for="board_file">파일 첨부</label></td>
 					<!-- 파일 첨부 형식은 input 태그의 type="file" 속성 사용 -->
 					<td class="td_right">
-						<input type="file" name="board_file" />
-<!-- 						<br><input type="file" name="board_file2" /> -->
-<!-- 						<br><input type="file" name="board_file3" /> -->
+<!-- 						<input type="file" name="file" /> -->
+						<!-- 복수개의 파일을 각각의 입력폼으로 처리할 경우(name 속성 동일하게) -->		
+						<input type="file" name="files" />
+						<br><input type="file" name="files" />
+						<br><input type="file" name="files" />
+						
+						<!-- 복수개의 파일을 하나의 입력폼으로 처리할 경우(mutliple 속성 필요) -->		
+<!-- 						<input type="file" name="files" multiple="multiple" /> -->
 					</td>
 				</tr>
 			</table>

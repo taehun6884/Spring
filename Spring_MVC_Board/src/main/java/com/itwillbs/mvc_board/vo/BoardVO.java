@@ -25,6 +25,9 @@ package com.itwillbs.mvc_board.vo;
  */
 
 import java.sql.Timestamp;
+import java.util.Arrays;
+
+import org.springframework.web.multipart.MultipartFile;
 
 public class BoardVO {
 	// board 테이블 컬럼에 대응하는 멤버변수 선언
@@ -40,6 +43,10 @@ public class BoardVO {
 	private int board_re_seq; // 순서번호
 	private int board_readcount;
 	private Timestamp board_date; // java.sql.TimeStamp
+	// MultipartFile 타입 객체를 통한 파일 처리를 위해 MultipartFile 타입 변수 선언
+//	private MultipartFile file;
+	// 만약, 복수개의 파일 업로드 시 MultipartFile 타입 배열로 선언
+	private MultipartFile[] files;
 	
 	public int getBoard_num() {
 		return board_num;
@@ -113,15 +120,21 @@ public class BoardVO {
 	public void setBoard_date(Timestamp board_date) {
 		this.board_date = board_date;
 	}
-	
+	public MultipartFile[] getFiles() {
+		return files;
+	}
+	public void setFiles(MultipartFile[] files) {
+		this.files = files;
+	}
 	@Override
 	public String toString() {
-		return "BoardBean [board_num=" + board_num + ", board_name=" + board_name + ", board_pass=" + board_pass
+		return "BoardVO [board_num=" + board_num + ", board_name=" + board_name + ", board_pass=" + board_pass
 				+ ", board_subject=" + board_subject + ", board_content=" + board_content + ", board_file=" + board_file
 				+ ", board_real_file=" + board_real_file + ", board_re_ref=" + board_re_ref + ", board_re_lev="
 				+ board_re_lev + ", board_re_seq=" + board_re_seq + ", board_readcount=" + board_readcount
-				+ ", board_date=" + board_date + "]";
+				+ ", board_date=" + board_date + ", files=" + Arrays.toString(files) + "]";
 	}
+
 	
 }
 
