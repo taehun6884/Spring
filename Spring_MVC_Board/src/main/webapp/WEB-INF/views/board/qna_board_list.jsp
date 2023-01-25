@@ -69,9 +69,24 @@
 		<!-- Login, Join 링크 표시 영역 -->
 		<jsp:include page="../inc/top.jsp"></jsp:include>
 	</header>
+	
 	<!-- 게시판 리스트 -->
 	<section id="listForm">
 	<h2>게시판 글 목록</h2>
+	<section id="buttonArea">
+		<form action="BoardList.bo">
+			<select name="searchType">
+				<option value="subject" <c:if test="${param.searchType eq 'subject' }">selected</c:if>>제목</option>
+				<option value="content" <c:if test="${param.searchType eq 'content' }">selected</c:if>>내용</option>
+				<option value="subject_content" <c:if test="${param.searchType eq 'subject_content' }">selected</c:if>>제목&내용</option>
+				<option value="name" <c:if test="${param.searchType eq 'name' }">selected</c:if>>작성자</option>
+			</select>
+			<input type="text" name="keyword" value="${param.keyword }">
+			<input type="submit" value="검색">
+			&nbsp;&nbsp;
+			<input type="button" value="글쓰기" onclick="location.href='BoardWriteForm.bo'" />
+		</form>
+	</section>
 	<table>
 		<tr id="tr_top">
 			<td width="100px">번호</td>
@@ -123,14 +138,7 @@
 		</c:forEach>
 	</table>
 	</section>
-	<section id="buttonArea">
-		<form action="BoardList.bo">
-			<input type="text" name="keyword">
-			<input type="submit" value="검색">
-			&nbsp;&nbsp;
-			<input type="button" value="글쓰기" onclick="location.href='BoardWriteForm.bo'" />
-		</form>
-	</section>
+	
 	<section id="pageList">
 		<!-- 
 		현재 페이지 번호(pageNum)가 1보다 클 경우에만 [이전] 링크 동작
