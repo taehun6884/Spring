@@ -11,14 +11,12 @@
 <script src="${pageContext.request.contextPath}/resources/js/jquery-3.6.3.js"></script>
 <script type="text/javascript">
 	function confirmDelete() {
-		let result = confirm("정말로 삭제 하시겠습니까!");
-		if(result){
-			location.href="MemberDelte.me?id=${member.id}";
+		let result = confirm("정말로 탈퇴하시겠습니까?");
+		if(result) {
+			location.href = "MemberDelete.me?id=${member.id}";
 		}
 	}
-
 </script>
-
 </head>
 <body>
 	<header>
@@ -28,8 +26,6 @@
 	<article>
 		<h1>회원 정보</h1>
 		<form action="MemberUpdate.me" method="post" name="joinForm">
-			<input type="hidden" value="${param.id }">
-			
 			<table border="1">
 				<tr>
 					<td>이름</td>
@@ -54,7 +50,7 @@
 						</select>
 					</td>
 				</tr>
-				<tr> 
+				<tr>
 					<td>아이디</td>
 					<td>
 						<input type="text" name="id" id="id" value="${member.id }" required="required" readonly="readonly" size="20" placeholder="4-16자리 영문자,숫자 조합">
@@ -87,3 +83,11 @@
 	</article>
 </body>
 </html>
+
+
+
+
+
+
+
+

@@ -2,23 +2,38 @@ package com.itwillbs.mvc_board.controller;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
-import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.itwillbs.mvc_board.service.BoardService;
 import com.itwillbs.mvc_board.vo.BoardVO;
+import com.itwillbs.mvc_board.vo.InboundProductListVO;
+import com.itwillbs.mvc_board.vo.Inbound_Product_ListVO;
 import com.itwillbs.mvc_board.vo.PageInfo;
 
 @Controller
@@ -27,12 +42,14 @@ public class BoardController {
 	private BoardService service;
 	
 	@GetMapping("/BoardWriteForm.bo")
-	public String write(Model model,HttpSession session) {
+	public String write(Model model, HttpSession session) {
+		// 세션 아이디가 존재하지 않으면 "로그인 필수!" 출력하고 이전페이지로 이동시키기
 		String sId = (String)session.getAttribute("sId");
 		if(sId == null || sId.equals("")) {
 			model.addAttribute("msg", "로그인 필수!");
 			return "fail_back";
 		}
+		
 		return "board/qna_board_write";
 	}
 	
@@ -44,7 +61,7 @@ public class BoardController {
 	//    파일 용량 초과에 대한 처리 추가 필요함(지금은 생략)
 	@PostMapping("/BoardWritePro.bo")
 	public String writePro(@ModelAttribute BoardVO board, Model model, HttpSession session) {
-		System.out.println(board);
+//		System.out.println(board);
 		// 세션 아이디가 존재하지 않으면 "로그인 필수!" 출력하고 이전페이지로 이동시키기
 		String sId = (String)session.getAttribute("sId");
 		if(sId == null || sId.equals("")) {
@@ -65,13 +82,26 @@ public class BoardController {
 		String saveDir = session.getServletContext().getRealPath(uploadDir);
 //		System.out.println("실제 업로드 경로 : " + saveDir);
 		
-		// 실제 경로를 갖는 File 객체 생성
-		File f = new File(saveDir);
-		// 만약, 해당 경로 상에 실제 디렉토리(폴더)가 존재하지 않을 경우 새로 생성
-		if(!f.exists()) {
-//			f.mkdir(); // 최종 경로가 존재하지 않으면 생성
-			f.mkdirs(); // 지정된 경로 상에 존재하지 않는 모든 경로를 차례대로 생성
+		// -------------------------------------------------------------------------------
+		// ---------------------------- java.io.File 객체 활용 ---------------------------
+//		// 실제 경로를 갖는 File 객체 생성
+//		File f = new File(saveDir);
+//		// 만약, 해당 경로 상에 실제 디렉토리(폴더)가 존재하지 않을 경우 새로 생성
+//		if(!f.exists()) {
+////			f.mkdir(); // 최종 경로가 존재하지 않으면 생성
+//			f.mkdirs(); // 지정된 경로 상에 존재하지 않는 모든 경로를 차례대로 생성
+//		}
+		// --------------- java.nio 패키지(Files, Path, Paths) 객체 활용 -----------------
+		// 1. Paths.get() 메서드를 호출하여 대상 파일 또는 경로에 대한 Path 객체 얻어오기
+		Path path = Paths.get(saveDir);
+		// 2. Files 클래스의 createDirectories() 메서드를 호출하여
+		//    지정된 경로 또는 파일 생성하기
+		try {
+			Files.createDirectories(path);
+		} catch (IOException e1) {
+			e1.printStackTrace();
 		}
+		// -------------------------------------------------------------------------------
 		
 		// BoardVO 객체에 전달된 MultipartFile 객체 꺼내기
 		// => 단, 복수개의 파라미터가 동일한 name 속성으로 전달된 경우 배열 타입으로 처리
@@ -80,8 +110,10 @@ public class BoardController {
 //		MultipartFile mFile = board.getFile();
 		
 		// 복수개의 파일을 하나의 이름으로 묶어서 다룰 경우에 사용할 변수 선언
-		String originalFileNames = "";
 		String realFileNames = "";
+		
+		// 파일 이동 처리에 사용할 파일명 저장 List 객체 생성
+		List<String> realFileNameList = new ArrayList<String>();
 		
 		// 복수개의 파일에 접근하기 위한 반복문
 		for(MultipartFile mFile : mFiles) {
@@ -90,23 +122,32 @@ public class BoardController {
 //			long fileSize = mFile.getSize();
 //			System.out.println("원본 파일명 : " + originalFileName);
 //			System.out.println("파일크기 : " + fileSize + " Byte");
+			
+			// 1개의 파일명을 저장할 변수 선언
+			String realFileName = "";
+			
+			// 가져온 파일이 있을 경우에만 중복 방지 대책 수행하기
 			if(!originalFileName.equals("")) {
 				// 파일명 중복 방지 대책
 				// 시스템에서 랜덤ID 값을 추출하여 파일명 앞에 붙이기("랜덤ID값_파일명" 형식)
 				// => 랜덤ID 값 추출은 UUID 클래스 활용(범용 고유 식별자)
 				String uuid = UUID.randomUUID().toString();
-//				System.out.println("업로드 될 파일명 : " + uuid + "_" + originalFileName);
-				// 파일명을 결합하여 보관할 변수에 하나의 파일 문자열 결합
-				originalFileNames += originalFileName + "/";
-				realFileNames += uuid + "_" + originalFileName + "/";
-			}else {
-				originalFileNames += "/";
-				realFileNames += "/";
+	//			System.out.println("업로드 될 파일명 : " + uuid + "_" + originalFileName);
+				
+				// UUID 와 "_" 와 실제 파일명과 "/" 기호를 결합하여 파일명 생성
+				realFileName = uuid + "_" + originalFileName + "/";
 			}
+			
+			// 업로드될 파일명에 1개 파일명을 결합
+			realFileNames += realFileName;
+			// 각 파일명을 List 객체에도 추가
+			// => MultipartFile 객체를 통해 실제 폴더로 이동 시킬 때 사용
+			realFileNameList.add(realFileName);
+			
 		}
 		
 		// BoardVO 객체에 원본 파일명과 업로드 될 파일명 저장
-		board.setBoard_file(originalFileNames);
+		board.setBoard_file(""); // 사용하지 않는 컬럼이므로 임시로 널스트링("") 값 전달
 		board.setBoard_real_file(realFileNames);
 		System.out.println("원본 파일명 : " + board.getBoard_file());
 		System.out.println("업로드 될 파일명 : " + board.getBoard_real_file());
@@ -127,15 +168,13 @@ public class BoardController {
 				//    작업 성공 시 transferTo() 메서드를 호출하여 실제 위치로 이동 작업 필요
 				//    (파라미터 : new File(업로드경로, 업로드파일명)
 				// MultipartFile 배열 크기만큼 반복 
-				for(int i = 0; i < board.getFiles().length; i++) {
+				for(int i = 0; i < mFiles.length; i++) {
 					// 하나씩 배열에서 객체 꺼내기
-					MultipartFile mFile = board.getFiles()[i];
-					// 파일명을 "/" 기준으로 분리하여 배열 인덱스와 동일한 위치의 문자열 사용
-					
-					if(!mFile.getOriginalFilename().equals("")) {
-						mFile.transferTo(
-							new File(saveDir, board.getBoard_real_file().split("/")[i])
-						);
+					// 가져온 파일이 있을 경우에만 파일 이동 작업 수행
+					if(!mFiles[i].getOriginalFilename().equals("")) {
+						// List 객체에 저장된 파일명을 사용하여 해당 파일을 실제 위치로 이동
+						mFiles[i].transferTo(
+							new File(saveDir, realFileNameList.get(i)));
 					}
 				}
 			} catch (IllegalStateException e) {
@@ -151,78 +190,575 @@ public class BoardController {
 			model.addAttribute("msg", "글 쓰기 실패!");
 			return "fail_back";
 		}
-	}//insert 구문
+		
+	}
 	
-	//LIST
-	@GetMapping(value = "/BoardList.bo")
-	public String list(@RequestParam(defaultValue = "")String searchType,
-					@RequestParam(defaultValue = "")String keyword,
-					@RequestParam(defaultValue ="1")int pageNum,Model model) {
-		System.out.println("searchType : "+searchType);
-		System.out.println("keyword : "+keyword);
-		// BoardListService 객체를 통해 게시물 목록 조회 후
-		// 조회 결과(List 객체)를 request 객체를 통해 qna_board_list.jsp 페이지로 전달
+	// "/BoardList.bo" 서블릿 요청에 대한 글 목록 조회 비즈니스 로직 list() - GET
+	// => 파라미터 : 검색타입(searchType) => 기본값 널스트링
+	//               검색어(keyword) => 기본값 널스트링
+	//               현재 페이지번호(pageNum) => 기본값 1 로 설정
+	//               검색어(keyword) => 기본값 널스트링
+	//               데이터 저장 Model 객체(model)
+//	@GetMapping("/BoardList.bo")
+//	public String list(
+//			@RequestParam(defaultValue = "") String searchType,
+//			@RequestParam(defaultValue = "") String keyword,
+//			@RequestParam(defaultValue = "1") int pageNum,
+//			Model model) {
 		// ---------------------------------------------------------------------------
-		// 페이징 처리를 위한 변수 선언
-		int listLimit = 10; // 한 페이지에서 표시할 게시물 목록을 10개로 제한
-		int startRow = (pageNum - 1) * listLimit; // 조회 시작 행번호 계산
-		//				System.out.println("startRow = " + startRow);
-		// ---------------------------------------------------------
-		// 파라미터로 전달받은 검색어(keyword) 가져와서 변수에 저장
-
-		// ---------------------------------------------------------
-		// BoardListService 클래스 인스턴스 생성
-		// BoardListService 객체의 getBoardList() 메서드를 호출하여 게시물 목록 조회
-		// => 파라미터 : 검색어, 시작행번호, 목록갯수   리턴타입 : List<BoardBean>(boardList)
-		List<BoardVO> boardList = service.getBoardList(keyword,searchType,startRow, listLimit);
-		
-		// ---------------------------------------------------------
-		// 페이징 처리
-		// 한 페이지에서 표시할 페이지 목록(번호) 갯수 계산
-		// 1. BoardListService - selectBoardListCount() 메서드를 호출하여 전체 게시물 수 조회(페이지 목록 계산에 사용)
-		// => 파라미터 : 검색어   리턴타입 : int(listCount)
-//					System.out.println("총 게시물 수 : " + listCount);
-		int listCount = service.getBoardListCount(searchType,keyword);
-		// 2. 한 페이지에서 표시할 페이지 목록 갯수 설정
-		int pageListLimit = 10; // 한 페이지에서 표시할 페이지 목록을 3개로 제한
-		
-		// 3. 전체 페이지 목록 수 계산
-		int maxPage = listCount / listLimit 
-						+ (listCount % listLimit == 0 ? 0 : 1);
-		
-		// 4. 시작 페이지 번호 계산
-		int startPage = (pageNum - 1) / pageListLimit * pageListLimit + 1;
-		
-		// 5. 끝 페이지 번호 계산
-		int endPage = startPage + pageListLimit - 1;
-		
-		// 6. 만약, 끝 페이지 번호(endPage)가 전체(최대) 페이지 번호(maxPage) 보다
-		//    클 경우, 끝 페이지 번호를 최대 페이지 번호로 교체
-		if(endPage > maxPage) {
-			endPage = maxPage;
-		}
-		
-		// PageInfo 객체 생성 후 페이징 처리 정보 저장
-		PageInfo pageInfo = new PageInfo(listCount, pageListLimit, maxPage, startPage, endPage);
-		// ----------------------------------------------------------------------
-		model.addAttribute("boardList",boardList);
-		model.addAttribute("pageInfo",pageInfo);
-		
+//		// 페이징 처리를 위한 변수 선언
+//		int listLimit = 10; // 한 페이지에서 표시할 게시물 목록을 10개로 제한
+//		int startRow = (pageNum - 1) * listLimit; // 조회 시작 행번호 계산
+////		System.out.println("startRow = " + startRow);
+//		// ---------------------------------------------------------------------------
+//		// Service 객체의 getBoardList() 메서드를 호출하여 게시물 목록 조회
+//		// => 파라미터 : 검색타입, 검색어, 시작행번호, 목록갯수   
+//		// => 리턴타입 : List<BoardVO>(boardList)
+//		List<BoardVO> boardList = service.getBoardList(searchType, keyword, startRow, listLimit);
+//		// ---------------------------------------------------------------------------
+//		// 페이징 처리
+//		// 한 페이지에서 표시할 페이지 목록(번호) 갯수 계산
+//		// 1. Service 객체의 selectBoardListCount() 메서드를 호출하여 전체 게시물 수 조회
+//		// => 파라미터 : 검색타입, 검색어   리턴타입 : int(listCount)
+//		int listCount = service.getBoardListCount(searchType, keyword);
+////		System.out.println("총 게시물 수 : " + listCount);
+//		
+//		// 2. 한 페이지에서 표시할 페이지 목록 갯수 설정
+//		int pageListLimit = 10; // 한 페이지에서 표시할 페이지 목록을 3개로 제한
+//		
+//		// 3. 전체 페이지 목록 수 계산
+//		int maxPage = listCount / listLimit 
+//						+ (listCount % listLimit == 0 ? 0 : 1); 
+//		
+//		// 4. 시작 페이지 번호 계산
+//		int startPage = (pageNum - 1) / pageListLimit * pageListLimit + 1;
+//		
+//		// 5. 끝 페이지 번호 계산
+//		int endPage = startPage + pageListLimit - 1;
+//		
+//		// 6. 만약, 끝 페이지 번호(endPage)가 전체(최대) 페이지 번호(maxPage) 보다
+//		//    클 경우, 끝 페이지 번호를 최대 페이지 번호로 교체
+//		if(endPage > maxPage) {
+//			endPage = maxPage;
+//		}
+//		
+//		// PageInfo 객체 생성 후 페이징 처리 정보 저장
+//		PageInfo pageInfo = new PageInfo(listCount, pageListLimit, maxPage, startPage, endPage);
+//		// ---------------------------------------------------------------------------
+//		// 게시물 목록 객체(boardList) 와 페이징 정보 객체(pageInfo)를 Model 객체에 저장
+//		model.addAttribute("boardList", boardList);
+//		model.addAttribute("pageInfo", pageInfo);
+//		
+//		return "board/qna_board_list";
+//	}
+	
+	// ===============================================================================
+	// 기본 목록 뷰페이지로 이동하는 서블릿 처리
+	@GetMapping("/BoardList.bo")
+	public String list() {
 		return "board/qna_board_list";
 	}
 	
+	// AJAX 요청을 통한 글목록 조회
+	// => AJAX 요청에 대한 JSON 데이터로 응답
+	// => 현재 메서드에서 JSON 타입 응답 데이터를 바로 생성하여 출력하기 위해
+	//    @ResponseBody 어노테이션 필요
+	// => 이동할 페이지가 없으므로 리턴타입 void
+	// => 만약, 응답 데이터의 한글이 깨질 경우 다음과 같이 매핑 데이터에 정보 추가
+	//    @GetMapping(value = "/BoardListJson.bo", produces = "application/json; charset=utf-8")
+	@ResponseBody
+	@GetMapping("/BoardListJson.bo")
+	public void listJson(
+			@RequestParam(defaultValue = "") String searchType,
+			@RequestParam(defaultValue = "") String keyword,
+			@RequestParam(defaultValue = "1") int pageNum,
+			Model model,
+			HttpServletResponse response) {
+		
+		// 페이징 처리를 위한 변수 선언
+		int listLimit = 10; // 한 페이지에서 표시할 게시물 목록을 10개로 제한
+		int startRow = (pageNum - 1) * listLimit; // 조회 시작 행번호 계산
+		// Service 객체의 getBoardList() 메서드를 호출하여 게시물 목록 조회
+		// ---------------------------------------------------------------------------
+		// => 파라미터 : 검색타입, 검색어, 시작행번호, 목록갯수   
+		// => 리턴타입 : List<BoardVO>(boardList)
+		List<BoardVO> boardList = service.getBoardList(searchType, keyword, startRow, listLimit);
+		// ---------------------------------------------------------------------------
+		// 자바 데이터를 JSON 형식으로 변환하기
+		// => org.json 패키지의 JSONObject 클래스를 활용하여 JSON 객체 1개를 생성하고
+		//    JSONArray 클래스를 활용하여 JSONObject 객체 복수개에 대한 배열 생성
+		// 0. JSONObject 객체 복수개를 저장할 JSONArray 클래스 인스턴스 생성
+		JSONArray jsonArray = new JSONArray();
+		
+		// 1. List 객체 크기만큼 반복
+		for(BoardVO board : boardList) {
+			// 2. JSONObject 클래스 인스턴스 생성
+			// => 파라미터 : VO(Bean) 객체(멤버변수 및 Getter/Setter, 기본생성자 포함)
+			JSONObject jsonObject = new JSONObject(board);
+//			System.out.println(jsonObject);
+			
+			// 참고. 저장되어 있는 JSON 데이터를 꺼낼 수도 있다! - get() 메서드 활용
+//			System.out.println(jsonObject.get("board_pass"));
+			
+			// 3. JSONArray 객체의 put() 메서드를 호출하여 JSONObject 객체 추가
+			jsonArray.put(jsonObject);
+		}
+		
+//		System.out.println(jsonArray);
+		// => JSONObject 복수개가 배열 형태로 JSONArray 객체에 저장되어 있음
+		// 또한, JSONArray 객체에서 JSONObject 객체를 꺼낼 수도 있다!
+//		JSONObject jsonObject = (JSONObject)jsonArray.get(0); // 첫번째 배열에서 꺼내기
+		// => 이 때, 리턴타입이 Object 타입이므로 JSONObject 타입 형변환 필요
+//		System.out.println(jsonObject.get("board_pass"));
+		
+		try {
+			// 생성된 JSON 객체를 활용하여 응답 데이터를 직접 생성 후 웹페이지에 출력
+			// response 객체의 setCharacterEncoding() 메서드로 출력 데이터 인코딩 지정 후
+			// response 객체의 getWriter() 메서드로 PrintWriter 객체를 리턴받아
+			// PrintWriter 객체의 print() 메서드를 호출하여 응답데이터 출력
+			response.setCharacterEncoding("UTF-8");
+			response.getWriter().print(jsonArray); // toString() 생략됨
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+	}
+	// ===============================================================================
+	
 	@GetMapping(value = "/BoardDetail.bo")
-	public String detail(@RequestParam int board_num,Model model) {
+	public String detail(@RequestParam int board_num, Model model) {
+		// Service 객체의 getBoard() 메서드를 호출하여 게시물 상세 정보 조회
+		// => 파라미터 : 글번호    리턴타입 : BoardVO(board)
 		BoardVO board = service.getBoard(board_num);
-		
+		System.out.println(board);
+		// 조회 결과 BoardVO 객체가 존재할 경우 조회수 증가 - increaseReadcount()
+		// => 파라미터 : 글번호
 		if(board != null) {
-			service.increaseReadCount(board_num);
-		
+			service.increaseReadcount(board_num);
+			
+			// 조회수 증가 후 BoardVO 객체의 조회수(board_readcount) 값 1 증가시키기
 			board.setBoard_readcount(board.getBoard_readcount() + 1);
 		}
-		model.addAttribute("board",board);
+		
+		// Model 객체에 BoardVO 객체 추가
+		model.addAttribute("board", board);
 		
 		return "board/qna_board_view";
+	}
+	
+	// BoardDeleteForm.bo 요청에 대한 글 삭제 폼 요청 - GET
+	@GetMapping(value = "/BoardDeleteForm.bo")
+	public String delete() {
+		return "board/qna_board_delete";
+	}
+	
+	// BoardDeletePro.bo 요청에 대한 글 삭제 비즈니스 로직 - POST
+	@PostMapping(value = "/BoardDeletePro.bo")
+	public String deletePro(@ModelAttribute BoardVO board, 
+			@RequestParam(defaultValue = "1") int pageNum, Model model, HttpSession session) {
+		// Service 객체의 isBoardWriter() 메서드를 호출하여 
+		// 전달받은 패스워드가 게시물의 패스워드와 일치하는지 비교
+		// => 파라미터 : 글번호, 패스워드    리턴타입 : BoardVO
+		if(service.isBoardWriter(board.getBoard_num(), board.getBoard_pass()) != null) { // 일치
+//			System.out.println("패스워드 일치!");
+			
+			// 주의! 삭제 전 해당 게시물의 파일명 조회 위해
+			// Service 객체의 getRealFile() 메서드를 호출
+			// => 파라미터 : 글번호    리턴타입 : String(realFile)
+			String realFile = service.getRealFile(board.getBoard_num());
+//			System.out.println(realFile);
+			
+			// Service 객체의 removeBoard() 메서드를 호출하여 게시물 삭제 작업 요청
+			// => 파라미터 : 글번호    리턴타입 : int(deleteCount)
+			int deleteCount = service.removeBoard(board.getBoard_num());
+			
+			// 게시물 삭제 성공 시 해당 게시물의 파일도 삭제
+			if(deleteCount > 0) { // 삭제 성공
+				// 파일명을 "/" 문자열 기준으로 분리 후 for문 반복을 통해 해당 파일 삭제
+//				String[] arrRealFile = realFile.split("/");
+//				for(String fileName : arrRealFile) {
+//					System.out.println(fileName);
+//				}
+				
+				for(String fileName : realFile.split("/")) {
+					String uploadDir = "/resources/upload"; // 가상의 업로드 경로(루트(webapp) 기준)
+					String saveDir = session.getServletContext().getRealPath(uploadDir);
+					
+//					File f = new File(saveDir, fileName);
+//					// 해당 파일이 존재할 경우 삭제
+//					if(f.exists()) {
+//						f.delete();
+//					}
+					// --------------- java.nio 패키지(Files, Path, Paths) 객체 활용 -----------------
+					// 1. Paths.get() 메서드를 호출하여 대상 파일에 대한 Path 객체 얻어오기
+					Path path = Paths.get(saveDir + "/" + fileName);
+					// 2. Files 클래스의 deleteIfExists() 메서드를 호출하여 지정된 파일 삭제하기
+					try {
+						Files.deleteIfExists(path);
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+					// -------------------------------------------------------------------------------
+				}
+				
+				return "redirect:/BoardList.bo?pageNum=" + pageNum;
+			} else { // 삭제 실패
+				model.addAttribute("msg", "게시물 삭제 실패!");
+				return "fail_back";
+			}
+			
+		} else { // 불일치
+			model.addAttribute("msg", "삭제 권한이 없습니다!");
+			return "fail_back";
+		}
+		
+	}
+	
+	// "/BoardModifyForm.bo" 서블릿 요청에 대한 modify() 메서드 정의
+	// Service 객체의 getBoard() 메서드를 호출하여 게시물 상세 정보 조회
+	// => 파라미터 : 글번호    리턴타입 : BoardVO(board)
+	// => 조회 결과는 Model 객체에 추가
+	// => board/qna_board_modify.jsp 페이지로 포워딩
+	@GetMapping("/BoardModifyForm.bo")
+	public String modify(@RequestParam int board_num, Model model, HttpSession session) {
+		// 세션 아이디가 존재하지 않으면 "로그인 필수!" 출력하고 이전페이지로 이동시키기
+		String sId = (String)session.getAttribute("sId");
+		if(sId == null || sId.equals("")) {
+			model.addAttribute("msg", "로그인 필수!");
+			return "fail_back";
+		}
+		
+		BoardVO board = service.getBoard(board_num);
+		
+		model.addAttribute("board", board);
+		
+		return "board/qna_board_modify";
+	}
+	
+	@PostMapping(value = "/BoardModifyPro.bo")
+	public String modifyPro(
+			@ModelAttribute BoardVO board, 
+			@RequestParam(defaultValue = "1") int pageNum,
+			Model model, HttpSession session) {
+		// 세션 아이디가 존재하지 않으면 "로그인 필수!" 출력하고 이전페이지로 이동시키기
+		String sId = (String)session.getAttribute("sId");
+		if(sId == null || sId.equals("")) {
+			model.addAttribute("msg", "로그인 필수!");
+			return "fail_back";
+		}
+		
+		// -------------------------------------------------------------------------
+		String uploadDir = "/resources/upload"; // 가상의 업로드 경로(루트(webapp) 기준)
+		String saveDir = session.getServletContext().getRealPath(uploadDir);
+		// --------------- java.nio 패키지(Files, Path, Paths) 객체 활용 -----------------
+		// 1. Paths.get() 메서드를 호출하여 대상 파일 또는 경로에 대한 Path 객체 얻어오기
+		Path path = Paths.get(saveDir);
+		// 2. Files 클래스의 createDirectories() 메서드를 호출하여
+		//    지정된 경로 또는 파일 생성하기
+		try {
+			Files.createDirectories(path);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+		// -------------------------------------------------------------------------------
+		MultipartFile[] mFiles = board.getFiles();
+		
+		// 복수개의 파일을 하나의 이름으로 묶어서 다룰 경우에 사용할 변수 선언
+		String realFileNames = "";
+		
+		// 파일 이동 처리에 사용할 파일명 저장 List 객체 생성
+		List<String> realFileNameList = new ArrayList<String>();
+		
+		// 복수개의 파일에 접근하기 위한 반복문
+		for(MultipartFile mFile : mFiles) {
+			// MultipartFile 객체의 getOriginalFilename() 메서드를 통해 파일명 꺼내기
+			String originalFileName = mFile.getOriginalFilename();
+			
+			// 1개의 파일명을 저장할 변수 선언
+			String realFileName = "";
+			
+			// 가져온 파일이 있을 경우에만 중복 방지 대책 수행하기
+			if(!originalFileName.equals("")) {
+				// 파일명 중복 방지 대책
+				String uuid = UUID.randomUUID().toString();
+				
+				// UUID 와 "_" 와 실제 파일명과 "/" 기호를 결합하여 파일명 생성
+				realFileName = uuid + "_" + originalFileName + "/";
+			}
+			
+			// 업로드될 파일명에 1개 파일명을 결합
+			realFileNames += realFileName;
+			// 각 파일명을 List 객체에도 추가
+			// => MultipartFile 객체를 통해 실제 폴더로 이동 시킬 때 사용
+			realFileNameList.add(realFileName);
+		}
+		
+		// BoardVO 객체에 원본 파일명과 업로드 될 파일명 저장
+		board.setBoard_file(""); // 사용하지 않는 컬럼이므로 임시로 널스트링("") 값 전달
+		board.setBoard_real_file(realFileNames);
+		// --------------------------------------------------------------------
+		// Service 객체의 isBoardWriter() 메서드를 호출하여 
+		// 전달받은 패스워드가 게시물의 패스워드와 일치하는지 비교
+		// => 파라미터 : 글번호, 패스워드    리턴타입 : BoardVO
+		if(service.isBoardWriter(board.getBoard_num(), board.getBoard_pass()) != null) {
+			// 패스워드 일치할 경우
+			// Service - modifyBoard() 메서드 호출하여 수정 작업 요청
+			// => 파라미터 : BoardVO 객체, 리턴타입 : int(updateCount)
+			int updateCount = service.modifyBoard(board);
+			
+			// 수정 실패 시 "게시물 수정 실패!" 출력 후 이전페이지로 돌아가기
+			// 수정 성공 시 수정되는 파일이 있을 경우 새 파일 이동 작업 수행
+			// => BoardDetail.bo 페이지로 리다이렉트
+			if(updateCount > 0) {
+				try {
+					for(int i = 0; i < mFiles.length; i++) {
+						if(!mFiles[i].getOriginalFilename().equals("")) {
+							mFiles[i].transferTo(new File(saveDir, realFileNameList.get(i)));
+						}
+					}
+				} catch (IllegalStateException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				
+				return "redirect:/BoardDetail.bo?board_num=" + board.getBoard_num() + "&pageNum=" + pageNum;
+			} else {
+				model.addAttribute("msg", "게시물 수정 실패!");
+				return "fail_back";
+			}
+		} else {
+			// 패스워드 일치하지 않을 경우
+			// "수정 권한이 없습니다!" 메세지 출력 후 이전페이지로 돌아가기
+			model.addAttribute("msg", "수정 권한이 없습니다!");
+			return "fail_back";
+		}
+		
+	}
+	
+	// "/BoardReplyForm.bo" 서블릿 요청에 대한 reply() 메서드 정의
+	// Service 객체의 getBoard() 메서드를 호출하여 게시물 상세 정보 조회
+	// => 파라미터 : 글번호    리턴타입 : BoardVO(board)
+	// => 조회 결과는 Model 객체에 추가
+	// => board/qna_board_reply.jsp 페이지로 포워딩
+	@GetMapping("/BoardReplyForm.bo")
+	public String reply(@RequestParam int board_num, Model model, HttpSession session) {
+		// 세션 아이디가 존재하지 않으면 "로그인 필수!" 출력하고 이전페이지로 이동시키기
+		String sId = (String)session.getAttribute("sId");
+		if(sId == null || sId.equals("")) {
+			model.addAttribute("msg", "로그인 필수!");
+			return "fail_back";
+		}
+		
+		BoardVO board = service.getBoard(board_num);
+		
+		model.addAttribute("board", board);
+		
+		return "board/qna_board_reply";
+	}
+	
+	@PostMapping("/BoardReplyPro.bo")
+	public String replyPro(@ModelAttribute BoardVO board, Model model, HttpSession session) {
+		// 세션 아이디가 존재하지 않으면 "로그인 필수!" 출력하고 이전페이지로 이동시키기
+		String sId = (String)session.getAttribute("sId");
+		if(sId == null || sId.equals("")) {
+			model.addAttribute("msg", "로그인 필수!");
+			return "fail_back";
+		}
+		
+		// -------------------------------------------------------------------------
+		String uploadDir = "/resources/upload"; // 가상의 업로드 경로(루트(webapp) 기준)
+		String saveDir = session.getServletContext().getRealPath(uploadDir);
+		// --------------- java.nio 패키지(Files, Path, Paths) 객체 활용 -----------------
+		Path path = Paths.get(saveDir);
+		try {
+			Files.createDirectories(path);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+		// -------------------------------------------------------------------------------
+		// BoardVO 객체에 전달된 MultipartFile 객체 꺼내기
+		// => 단, 복수개의 파라미터가 동일한 name 속성으로 전달된 경우 배열 타입으로 처리
+		MultipartFile[] mFiles = board.getFiles();
+		
+		// MultipartFile 객체의 getOriginalFilename() 메서드를 통해 파일명 꺼내기
+		// => 답글의 파일 업로드 갯수 1개 제한이므로 0번 배열에 파일명 있음
+		String originalFileName = mFiles[0].getOriginalFilename();
+		String realFileName = "";
+		
+		// 가져온 파일이 있을 경우에만 중복 방지 대책 수행하기
+		if(!originalFileName.equals("")) {
+			String uuid = UUID.randomUUID().toString();
+			
+			// 파일명을 결합하여 보관할 변수에 하나의 파일 문자열 결합
+			realFileName = uuid + "_" + originalFileName;
+		} 
+		
+		// BoardVO 객체에 원본 파일명과 업로드 될 파일명 저장
+		// => 단, 답글의 파일 업로드는 1개로 제한하므로 0번 배열에 파일명이 저장되어 있음
+		board.setBoard_file(originalFileName);
+		board.setBoard_real_file(realFileName);
+		
+		// --------------------------------------------------------------------
+		// Service 객체의 registReplyBoard() 메서드를 호출하여 게시물 등록 작업 요청
+		// => 파라미터 : BoardVO 객체    리턴타입 : int(insertCount)
+		int insertCount = service.registReplyBoard(board);
+		
+		// 등록 성공/실패에 따른 포워딩 작업 수행
+		if(insertCount > 0) { // 성공
+			try {
+				// 주의! 파일 등록 작업 성공 후 반드시 실제 폴더 위치에 업로드 수행 필요!
+				// => MultipartFile 객체는 임시 경로에 파일을 업로드하므로
+				//    작업 성공 시 transferTo() 메서드를 호출하여 실제 위치로 이동 작업 필요
+				//    (파라미터 : new File(업로드경로, 업로드파일명)
+				// MultipartFile 배열 크기만큼 반복 
+				for(int i = 0; i < board.getFiles().length; i++) {
+					// 하나씩 배열에서 객체 꺼내기
+					MultipartFile mFile = board.getFiles()[i];
+//					System.out.println("MultipartFile : " + mFile.getOriginalFilename());
+					
+					// 가져온 파일이 있을 경우에만 파일 이동 작업 수행
+					if(!mFile.getOriginalFilename().equals("")) {
+						// 실제 파일명을 "/" 기준으로 분리하여 
+						// 배열 인덱스와 동일한 위치의 문자열을 이동할 파일명으로 사용
+						mFile.transferTo(
+							new File(saveDir, board.getBoard_real_file())
+						);
+					}
+				}
+			} catch (IllegalStateException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			
+			// 글 목록 페이지(BoardList.bo) 로 리다이렉트
+			return "redirect:/BoardList.bo";
+		} else { // 실패
+			// "msg" 속성명으로 "답글 쓰기 실패!" 메세지 전달 후 fail_back 포워딩
+			model.addAttribute("msg", "답글 쓰기 실패!");
+			return "fail_back";
+		}
+		
+	}
+	
+	// 글 수정 시 개별 파일 삭제 처리를 별도로 수행(AJAX 요청)
+	// => 파라미터 : 글번호, 파일명, 세션 객체, 응답 객체 필요
+	@ResponseBody
+	@PostMapping("/BoardDeleteFile.bo")
+	public void deleteFile(
+			@RequestParam int board_num,
+			@RequestParam String board_pass,
+			@RequestParam String fileName,
+			HttpSession session, HttpServletResponse response) {
+//		System.out.println(board_num + ", " + fileName);
+		
+		response.setCharacterEncoding("UTF-8");
+		
+		try {
+			// Service 객체의 isBoardWriter() 메서드를 호출하여 
+			// 전달받은 패스워드가 게시물의 패스워드와 일치하는지 비교
+			// => 파라미터 : 글번호, 패스워드    리턴타입 : BoardVO
+			if(service.isBoardWriter(board_num, board_pass) != null) {
+				// 게시물 패스워드가 일치할 경우 
+				// Service 객체의 removeBoardFile() 메서드 호출하여 개별 파일 삭제 요청
+				// => 파라미터 : 글번호, 파일명
+				int deleteCount = service.removeBoardFile(board_num, fileName);
+				
+				// DB 파일 삭제 성공 시 실제 파일 삭제
+				if(deleteCount > 0) { // 삭제 성공
+					String uploadDir = "/resources/upload"; // 가상의 업로드 경로(루트(webapp) 기준)
+					String saveDir = session.getServletContext().getRealPath(uploadDir);
+					
+					Path path = Paths.get(saveDir + "/" + fileName);
+					Files.deleteIfExists(path);
+					
+					response.getWriter().print("true");
+				} else { // 삭제 실패
+					response.getWriter().print("false");
+				}
+				
+			} else {
+				response.getWriter().print("incorrectPasswd");
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+	}
+	
+	
+	
+	// =====================================================================
+	// AJAX 를 활용한 JSON 데이터를 요청 정보에 담아 전송할 경우 처리
+	// 파라미터 지정 시 @RequestBody 어노테이션을 사용하여 지정하고
+	// 파라미터의 타입은 해당 요청 데이터를 저장 가능한 VO 객체를 지정하거나
+	// Map<String, Object> 타입으로 지정
+	// => GSON 또는 JACKSON 등의 JSON 처리 라이브러리 별도 추가 필요(기본 JSON 라이브러리 불가)
+//	@PostMapping("/BoardWriteProAjax.bo")
+//	public String writeProAjax(@RequestBody Map<String, Object> map) {
+////		System.out.println(map);
+//		System.out.println("글쓴이 : " + map.get("board_name"));
+//		System.out.println("패스워드 : " + map.get("board_pass"));
+//		
+//		return "";
+//	}
+	
+	@ResponseBody
+	@PostMapping("/BoardWriteProAjax.bo")
+	public void writeProAjax(@RequestBody BoardVO board, HttpServletResponse response) {
+//		System.out.println(map);
+		System.out.println("글쓴이(BoardVO) : " + board.getBoard_name());
+		System.out.println("패스워드(BoardVO) : " + board.getBoard_pass());
+		
+		try {
+			response.setCharacterEncoding("UTF-8");
+			response.getWriter().print("성공"); // toString() 생략됨
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+	}
+	
+	
+	// ===============================================================================
+	// 기본 목록 뷰페이지로 이동하는 서블릿 처리
+	@GetMapping("/BoardList2.bo")
+	public String list2() {
+		return "board/qna_board_list2";
+	}
+	
+	// 문자열로 전달되는 요청 데이터(JSON)를 문자열로 전달받기
+	@ResponseBody
+	@PostMapping("/BoardJson.bo")
+	public String list2Json(@RequestBody String jsonData) {
+		System.out.println(jsonData);
+		
+		// org.json.JSONArray 와 JSONObject 객체 활용하여 JSON 데이터 파싱할 경우
+//		JSONArray arr = new JSONArray(jsonData);
+//		JSONObject ob = new JSONObject(arr.get(0));
+		
+		// com.google.gson.Gson 객체를 활용하여 JSON 데이터 파싱할 경우
+		Gson gson = new Gson();
+		
+		// JSON 데이터(배열 내부에 객체가 저장되어 있는 JSON 문자열)을 파싱하여 저장할
+		// 자바의 객체로 변환하기 위해 Gson 객체의 fromJson() 메서드 활용
+		// => gson.fromJson(JSON 데이터, 파싱할클래스명.class);
+		// => 단, List 등의 복합 객체일 경우 별도의 클래스를 통해 타입을 지정해야함
+		//    ex) new TypeToken<List<BoardVO>>(){}.getType()
+		List<BoardVO> boardList = 
+				gson.fromJson(jsonData, new TypeToken<List<BoardVO>>(){}.getType());
+		
+		// List 데이터 처리 방법 1. 반복문을 통해 List 객체내의 BoardVO 객체를 전달하여 처리
+//		for(BoardVO board : boardList) {
+//			service.registBoard(board);
+//		}
+		
+		// List 데이터 처리 방법 2. 반복문 없이 List 객체 자체를 전달하여 처리
+		List<BoardVO> boardList2 = service.selectBoardList2(boardList);
+		System.out.println(boardList2);
+		
+		return "";
 	}
 	
 }

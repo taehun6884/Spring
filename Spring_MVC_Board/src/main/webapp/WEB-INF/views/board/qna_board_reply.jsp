@@ -79,7 +79,7 @@
 					<td class="td_left"><label for="board_file">파일</label></td>
 					<td class="td_right">
 						<!-- 답글 작성 시 파일 업로드는 선택 사항으로 required 옵션 제거 -->
-						<input type="file" name="board_file">
+						<input type="file" name="files">
 					</td>
 				</tr>
 			</table>

@@ -78,29 +78,7 @@
 		// => 검색타입과 검색어를 파라미터로 전달(검색하지 않을 경우에도 동일) 
 		load_list(searchType, keyword);
 		
-		// 무한스크롤 기능 구현
-		// window 객체에서 scroll 동작 시 기능 수행(이벤트 처리)을 위해 scroll() 함수 호출
-		$(window).scroll(function() {
-// 			$("#listForm").before("확인");
-			// 1. window 객체와 document 객체를 활용하여 스크롤 관련 값 가져오기
-			// => 스크롤바 현재 위치, 문서 표시되는 창의 높이, 문서 전체 높이
-			let scrollTop = $(window).scrollTop();
-			let windowHeight = $(window).height();
-			let documentHeight = $(document).height();
-			
-// 			console.log("scrollTop : " + scrollTop + ", windowHeight : " + windowHeight + ", documentHeight : " + documentHeight + "<br>");
-
-			// 2. 스크롤바 위치값 + 창 높이 + x 가 문서 전체 높이 이상이면
-			//    다음 페이지 게시물 목록 로딩하여 추가
-			// => 이 때, x 값은 마지막으로부터 여유 공간으로 둘 스크롤바 아래쪽 남은 공간(픽셀값)
-			//    (x 값을 1로 지정 시 스크롤바가 바닥에 닿을 때 다음 페이지 로딩)
-			if(scrollTop + windowHeight + 1 >= documentHeight) {
-				// 다음 페이지 로딩하기 위한 load_list() 함수 호출
-				// => 이 때, 페이지 번호를 1 증가시켜 다음 페이지 목록 로딩
-				pageNum++;
-				load_list(searchType, keyword);
-			}
-		});
+		// 무한스크롤 기능 구현(임시로 삭제함)
 	});
 	
 	// 게시물 목록 조회를 AJAX + JSON 으로 처리할 load_list() 함수 정의
@@ -115,8 +93,12 @@
 		.done(function(boardList) { // 요청 성공 시
 // 			$("#listForm > table").append(boardList);
 			
+		
 			// JSONArray 객체를 통해 배열 형태로 전달받은 JSON 데이터를
 			// 반복문을 통해 하나씩 접근하여 객체 꺼내기
+			// 반복문 내에서 인덱스 번호로 활용할 변수 선언
+			let index = 0;
+			
 			for(let board of boardList) {
 				// 답글일 경우 제목 앞 공백 추가 및 답글 아이콘 추가 작업
 				let space = "";
@@ -133,26 +115,84 @@
 				}
 				
 				// 테이블에 표시할 JSON 데이터 출력문 생성
-				// => 출력할 데이터는 board.xxx 형식으로 접근
-				let result = "<tr height='100'>"
-							+ "<td>" + board.board_num + "</td>"
+				// => 각 게시물(레코드) 구별을 위해 id 값을 다르게 생성
+				let result = "<tr>"
+							+ "<td><input type='checkbox' class='jsonCheck' id='check" + index + "' value='" + index + "'></td>"
+							+ "<td id='board_num" + index + "'>" + board.board_num + "</td>"
 							+ "<td id='subject'>" 
 								+ space
-								+ "<a href='BoardDetail.bo?board_num=" + board.board_num + "'>"
+								+ "<a href='BoardDetail.bo?board_num=" + board.board_num + "' id='board_subject" + index + "'>"
 								+ board.board_subject + "</a></td>"
-							+ "<td>" + board.board_name + "</td>"
+							+ "<td id='board_name" + index + "'>" + board.board_name + "</td>"
 							+ "<td>" + board.board_date + "</td>"
 							+ "<td>" + board.board_readcount + "</td>"
 							+ "</tr>";
 				
 				// 지정된 위치(table 태그 내부)에 JSON 객체 출력문 추가
 				$("#listForm > table").append(result);
+				
+				
+				// 인덱스 1 증가
+				index++; 
 			}
 		})
 		.fail(function() {
 			$("#listForm > table").append("<h3>요청 실패!</h3>");
 		});
+		
+		$("#btnOk").click(function() {
+			// 객체를 저장할 배열 생성
+			let boardArr = new Array();
+			
+			// .jsonCheck 선택자에 해당하는 체크박스 갯수만큼 반복
+			$(".jsonCheck").each(function(index, item) {
+// 				console.log(index + " : " + item);
+// 				console.log(index + " : " + item.checked);
+
+				// 체크박스의 상태가 true 일 때 체크박스 인덱스와 동일한 인덱스를 갖는
+				// 데이터들을 가져와서 객체로 생성 후 객체를 배열에 추가(push)
+				if(item.checked) {
+// 					console.log(index + " : " + item.checked);
+					// 데이터들을 저장할 객체 생성
+					let board = new Object();
+					
+					// 각 요소의 내부 데이터(텍스트 요소) 가져와서 객체에 저장
+					// => html() 함수가 아닌 text() 함수를 사용하여 텍스트 요소만 가져오기
+					board.board_num = $("#board_num"+ index).text();
+					board.board_name = $("#board_name"+ index).text();
+					board.board_subject = $("#board_subject"+ index).text();
+					
+// 					console.log(board);
+
+					// 생성된 객체 1개를 배열에 추가
+					boardArr.push(board);
+				}
+					 
+			}); // each() 함수 끝
+			
+// 			console.log(boardArr);
+// 			console.log(JSON.stringify(boardArr));
+			
+			// AJAX 요청을 통해 JSON 데이터 전송
+			$.ajax({
+				type: "POST",
+				url: "BoardJson.bo",
+				dataType: "text", // 응답 데이터 타입
+				contentType: "application/json", // 요청 시 전송 데이터 타입
+				data: JSON.stringify(boardArr),
+				success: function(result) {
+					alert(result);
+				}, 
+				fail: function() {
+					alert("요청 실패!");
+				}
+			});
+			
+		});
+		
 	}
+	
+	
 </script>
 </head>
 <body>
@@ -180,6 +220,7 @@
 		</section>
 		<table>
 			<tr id="tr_top">
+				<td>선택</td>
 				<td width="100px">번호</td>
 				<td>제목</td>
 				<td width="150px">작성자</td>
@@ -189,6 +230,9 @@
 			<!-- AJAX 를 사용하여 글목록 조회 결과를 표시할 위치 -->
 		</table>
 	</section>
+	<div id="hiddenArea">
+		<input type="button" value="확인" id="btnOk">
+	</div>
 </body>
 </html>
 

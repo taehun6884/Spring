@@ -11,6 +11,8 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.itwillbs.mvc_board.service.MemberService;
@@ -241,32 +243,63 @@ public class MemberController {
 			}
 			
 			// 권한이 있을 경우 삭제 폼으로 이동
-			return "member/member_delete_form";
+			// 단, 관리자일 경우 바로 MemberDeletePro.me 서블릿 요청
+			if(sId.equals("admin")) {
+				return "redirect:/MemberDeletePro.me?id=" + member.getId(); // GET 방식
+			} else {
+				return "member/member_delete_form";
+			}
 		}
 	}
 	
-//	// 2-2) 세션 아이디와 전달받은 아이디가 같거나, 관리자이면 조회 작업 수행
-//				// Service 객체의 removeMember() 메서드 호출하여 회원 삭제 요청
-//				// => 파라미터 : MemberVO(member)   리턴타입 : int(deleteCount)
-//				// => MemberVO 객체 대신 String id 타입으로 전달받거나
-//				//    removeMember() 메서드에 전달 시 member.getId() 로 패스워드만 전달해도 무관
-//				int deleteCount  = service.removeMember(member);
-//				
-//				// 삭제 성공/실패에 따른 포워딩 작업 수행
-//				if(deleteCount > 0) { // 성공
-//					// 관리자 or 일반 회원에 따라 다른 페이지로 리다이렉트
-//					// 관리자 회원의 경우 "AdminMain.me" 페이지로 리다이렉트
-//					// 일반 회원의 경우 메인페이지로 리다이렉트
-//					if(sId.equals("admin")) {
-//						return "redirect:/AdminMain.me";
-//					} else {
-//						return "redirect:/";
-//					}
-//				} else { // 실패
-//					// "msg" 속성명으로 "삭제 실패!" 메세지 전달 후 fail_back 포워딩
-//					model.addAttribute("msg", "삭제 실패!");
-//					return "fail_back";
-//				}
+	// "/MemberDeletePro.me" 요청에 대한 회원 삭제 비즈니스 로직 처리 => deletePro()
+//	@PostMapping(value = "/MemberDeletePro.me")
+	// 관리자일 경우 GET 방식 요청, 아니면 POST 방식 요청이므로 함께 처리 필요
+	@RequestMapping(value = "/MemberDeletePro.me", 
+					method = {RequestMethod.GET, RequestMethod.POST})
+	public String deletePro(HttpSession session, @ModelAttribute MemberVO member, Model model) {
+		// 세션 아이디 가져오기
+		String sId = (String)session.getAttribute("sId");
+		
+		// 입력받은 패스워드 확인 작업을 위해 Service 객체의 getPasswd() 메서드 재사용
+		// => 단, 세션 아이디가 "admin" 일 경우 패스워드 확인 작업 생략
+		if(!sId.equals("admin")) {
+			BCryptPasswordEncoder passwdEncoder = new BCryptPasswordEncoder();
+			String passwd = service.getPasswd(member.getId());
+			
+			// 패스워드 판별
+			if(passwd == null || !passwdEncoder.matches(member.getPasswd(), passwd)) { // 실패
+				model.addAttribute("msg", "권한이 없습니다!");
+				return "fail_back";
+			}
+		}
+		
+		// Service 객체의 removeMember() 메서드 호출하여 회원 삭제 요청
+		// => 파라미터 : MemberVO(member)   리턴타입 : int(deleteCount)
+		// => MemberVO 객체 대신 String id 타입으로 전달받거나
+		//    removeMember() 메서드에 전달 시 member.getId() 로 패스워드만 전달해도 무관
+		int deleteCount  = service.removeMember(member);
+		
+		// 삭제 성공/실패에 따른 포워딩 작업 수행
+		if(deleteCount > 0) { // 성공
+			// 관리자 or 일반 회원에 따라 다른 페이지로 리다이렉트
+			// 관리자 회원의 경우 "AdminMain.me" 페이지로 리다이렉트
+			// 일반 회원의 경우 메인페이지로 리다이렉트
+			if(sId.equals("admin")) { // 세션 아이디가 "admin" 일 경우
+				return "redirect:/AdminMain.me";
+			} else { // 일반 회원일 경우
+				// 세션 초기화
+				session.invalidate();
+				return "redirect:/";
+			}
+		} else { // 실패
+			// "msg" 속성명으로 "삭제 실패!" 메세지 전달 후 fail_back 포워딩
+			model.addAttribute("msg", "삭제 실패!");
+			return "fail_back";
+		}
+		
+	}
+	
 	
 	
 	// "/AdminMain.me" 요청에 대한 회원목록 조회 비즈니스 로직 처리 => admin()
